@@ -19,13 +19,8 @@ export const metadata: Metadata = {
   applicationName: "Rental Sale Calculator",
   manifest: "/manifest.json",
   icons: {
-    icon: [
-      { url: "/icons/icon-192.png" },
-      { url: "/icons/icon-512.png" },
-      { url: "/icons/icon-192-maskable.png", type: "image/png", sizes: "192x192", purpose: "maskable" },
-      { url: "/icons/icon-512-maskable.png", type: "image/png", sizes: "512x512", purpose: "maskable" },
-    ],
-    apple: "/icons/icon-180.png",
+    icon: [{ url: "/icons/icon-192.png" }, { url: "/icons/icon-512.png" }],
+    apple: [{ url: "/icons/icon-180.png" }],
   },
 };
 
