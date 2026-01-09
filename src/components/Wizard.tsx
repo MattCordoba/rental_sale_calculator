@@ -2,60 +2,35 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  type CurrentPropertyInputs,
-  type NewPropertyInputs,
-  calculateComparison,
-} from "@/lib/calculations";
+import ComparisonChart from "@/components/ComparisonChart";
+import { calculateDecision, type DecisionInputs } from "@/lib/sellDecision";
 import { NoopStorage, type AppState } from "@/lib/storage";
 
-const defaultExpenses = {
-  taxes: 0,
-  insurance: 0,
-  maintenanceMonthly: 0,
-  maintenancePercent: 0,
-  managementPercent: 0,
-  utilities: 0,
-  hoa: 0,
-  reserves: 0,
-};
-
-const defaultCurrent: CurrentPropertyInputs = {
-  rent: 0,
-  otherIncome: 0,
-  vacancyPercent: 5,
-  expenses: { ...defaultExpenses },
-  loanBalance: 0,
-  interestRate: 6.5,
-  monthlyPayment: 0,
-  salePrice: 0,
-  sellingCostPercent: 7,
-};
-
-const defaultNext: NewPropertyInputs = {
-  purchasePrice: 0,
-  closingCosts: 0,
-  closingCostsPercent: 2.5,
-  rehab: 0,
-  downPaymentPercent: 25,
-  interestRate: 6.75,
-  loanTermYears: 30,
-  rent: 0,
-  otherIncome: 0,
-  vacancyPercent: 5,
-  expenses: { ...defaultExpenses },
+const defaultInputs: DecisionInputs = {
+  currentPropertyValue: 10_000_000,
+  currentPropertyAcb: 2_000_000,
+  currentMortgageBalance: 1_000_000,
+  currentCapRate: 2,
+  currentGrowthRate: 4,
+  newCapRate: 2,
+  newGrowthRate: 4,
+  marginalTaxRate: 50,
+  capitalGainsInclusionRate: 66.6667,
+  realtorFeesPercent: 2,
+  propertyTransferTaxPercent: 2.8,
+  investmentAccountRoi: 5,
+  loanRate: 5,
+  loanAmortizationYears: 25,
+  clientAge: 70,
+  planningAge: 90,
+  newLoanToValue: 10,
+  decisionMarginPercent: 2,
 };
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
-});
-
-const currencyFine = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
 });
 
 const percent = new Intl.NumberFormat("en-US", {
@@ -157,54 +132,81 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
   </section>
 );
 
-const SummaryStat = ({ label, value }: { label: string; value: string }) => (
-  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-    <p className="text-xs uppercase tracking-[0.25em] text-white/40">{label}</p>
-    <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+const SummaryStat = ({
+  label,
+  value,
+  tone = "dark",
+}: {
+  label: string;
+  value: string;
+  tone?: "dark" | "light";
+}) => (
+  <div
+    className={`rounded-2xl border p-4 ${
+      tone === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-white/5"
+    }`}
+  >
+    <p
+      className={`text-xs uppercase tracking-[0.25em] ${
+        tone === "light" ? "text-slate-500" : "text-white/40"
+      }`}
+    >
+      {label}
+    </p>
+    <p className={`mt-2 text-2xl font-semibold ${tone === "light" ? "text-slate-900" : "text-white"}`}>
+      {value}
+    </p>
   </div>
 );
 
 export default function Wizard() {
   const [step, setStep] = useState(0);
-  const [current, setCurrent] = useState<CurrentPropertyInputs>(defaultCurrent);
-  const [next, setNext] = useState<NewPropertyInputs>(defaultNext);
+  const [inputs, setInputs] = useState<DecisionInputs>(defaultInputs);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const storage = useMemo(() => new NoopStorage(), []);
 
   useEffect(() => {
     storage.load().then((data) => {
       if (!data) return;
-      setCurrent(data.current);
-      setNext(data.next);
+      setInputs(data.inputs);
     });
   }, [storage]);
 
   useEffect(() => {
-    const state: AppState = { current, next };
+    const state: AppState = { inputs };
     storage.save(state);
-  }, [current, next, storage]);
+  }, [inputs, storage]);
 
-  const comparison = useMemo(() => calculateComparison(current, next), [current, next]);
+  const decision = useMemo(() => calculateDecision(inputs), [inputs]);
 
-  const steps = ["Current", "Sale", "New", "Results"];
+  const steps = ["Current", "Assumptions", "New", "Results"];
   const [showErrors, setShowErrors] = useState(false);
 
   const requiredMap = useMemo(() => {
     return [
       {
-        currentRent: current.rent > 0,
+        currentValue: inputs.currentPropertyValue > 0,
+        currentAcb: inputs.currentPropertyAcb > 0,
+        clientAge: inputs.clientAge > 0,
       },
       {
-        salePrice: current.salePrice > 0,
+        growthRate: inputs.currentGrowthRate > 0,
+        taxRate: inputs.marginalTaxRate > 0,
       },
       {
-        purchasePrice: next.purchasePrice > 0,
-        downPayment: next.downPaymentPercent > 0,
-        newRent: next.rent > 0,
+        ltv: inputs.newLoanToValue >= 0,
       },
       {},
     ];
-  }, [current.rent, current.salePrice, next.downPaymentPercent, next.purchasePrice, next.rent]);
+  }, [
+    inputs.clientAge,
+    inputs.currentGrowthRate,
+    inputs.currentPropertyAcb,
+    inputs.currentPropertyValue,
+    inputs.marginalTaxRate,
+    inputs.newLoanToValue,
+  ]);
 
   const isStepValid = useMemo(() => {
     const map = requiredMap[step] ?? {};
@@ -221,171 +223,169 @@ export default function Wizard() {
     setStep((value) => Math.min(steps.length - 1, value + 1));
   };
 
+  const planningDelta =
+    decision.newAtPlanning.strategyValue - decision.currentAtPlanning.strategyValue;
+
+  const getSnapshotAtAge = (ageOffset: number) => {
+    const age = Math.round(inputs.clientAge + ageOffset);
+    const current = decision.currentSeries.find((item) => item.age === age);
+    const next = decision.newSeries.find((item) => item.age === age);
+    return { age, current, next };
+  };
+
+  const year1 = getSnapshotAtAge(1);
+  const year10 = getSnapshotAtAge(10);
+  const year20 = getSnapshotAtAge(20);
+
   return (
     <div className="flex flex-col gap-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm uppercase tracking-[0.4em] text-white/50">Rental Sale Calculator</p>
-          <h1 className="mt-3 text-4xl font-semibold text-white md:text-5xl">
-            Should you sell your rental and trade up for stronger cash flow?
-          </h1>
-          <p className="mt-4 max-w-2xl text-base text-white/70">
-            Walk through each section to compare cash flow, cap rate, and cash-on-cash return between
-            your current rental and a new property.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {steps.map((label, index) => (
-            <StepPill key={label} label={label} active={index === step} />
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-[32px] border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-transparent p-8">
-        {step === 0 && (
-          <div className="flex flex-col gap-6">
-            <Section title="Current Rental Income">
-              <Field
-                label="Monthly rent"
-                value={current.rent}
-                onChange={(value) => setCurrent({ ...current, rent: value })}
-                suffix="USD"
-                required
-                invalid={showErrors && !requiredMap[0].currentRent}
-              />
-              <Field
-                label="Other income"
-                value={current.otherIncome}
-                onChange={(value) => setCurrent({ ...current, otherIncome: value })}
-                suffix="USD"
-              />
-              <Field
-                label="Vacancy/credit loss"
-                value={current.vacancyPercent}
-                onChange={(value) => setCurrent({ ...current, vacancyPercent: value })}
-                suffix="%"
-                step={0.1}
-              />
-            </Section>
-            <Section title="Operating Expenses (Monthly)">
-              <Field
-                label="Property taxes"
-                value={current.expenses.taxes}
-                onChange={(value) =>
-                  setCurrent({ ...current, expenses: { ...current.expenses, taxes: value } })
-                }
-                suffix="USD"
-              />
-              <Field
-                label="Insurance"
-                value={current.expenses.insurance}
-                onChange={(value) =>
-                  setCurrent({ ...current, expenses: { ...current.expenses, insurance: value } })
-                }
-                suffix="USD"
-              />
-              <Field
-                label="Maintenance/repairs"
-                value={current.expenses.maintenanceMonthly}
-                onChange={(value) =>
-                  setCurrent({
-                    ...current,
-                    expenses: { ...current.expenses, maintenanceMonthly: value },
-                  })
-                }
-                suffix="USD"
-                hint="+ % below"
-              />
-              <Field
-                label="Maintenance % of rent"
-                value={current.expenses.maintenancePercent}
-                onChange={(value) =>
-                  setCurrent({
-                    ...current,
-                    expenses: { ...current.expenses, maintenancePercent: value },
-                  })
-                }
-                suffix="%"
-                step={0.1}
-              />
-              <Field
-                label="Management fee"
-                value={current.expenses.managementPercent}
-                onChange={(value) =>
-                  setCurrent({
-                    ...current,
-                    expenses: { ...current.expenses, managementPercent: value },
-                  })
-                }
-                suffix="%"
-                step={0.1}
-              />
-              <Field
-                label="Owner-paid utilities"
-                value={current.expenses.utilities}
-                onChange={(value) =>
-                  setCurrent({ ...current, expenses: { ...current.expenses, utilities: value } })
-                }
-                suffix="USD"
-              />
-              <Field
-                label="HOA / misc"
-                value={current.expenses.hoa}
-                onChange={(value) =>
-                  setCurrent({ ...current, expenses: { ...current.expenses, hoa: value } })
-                }
-                suffix="USD"
-              />
-              <Field
-                label="Reserves / capex"
-                value={current.expenses.reserves}
-                onChange={(value) =>
-                  setCurrent({ ...current, expenses: { ...current.expenses, reserves: value } })
-                }
-                suffix="USD"
-              />
-            </Section>
+      <div className="print-hide flex flex-col gap-10">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.4em] text-white/50">Rental Sale Calculator</p>
+            <h1 className="mt-3 text-4xl font-semibold text-white md:text-5xl">
+              Should you sell your rental property?
+            </h1>
+            <p className="mt-4 max-w-2xl text-base text-white/70">
+              Compare keeping your current rental versus selling and purchasing a new property. The
+              decision is based on estate value at your planning age, with optional peak-delta
+              analysis.
+            </p>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            {steps.map((label, index) => (
+              <StepPill key={label} label={label} active={index === step} />
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[32px] border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-transparent p-8">
+          {step === 0 && (
+            <div className="flex flex-col gap-6">
+              <Section title="Current Property">
+                <Field
+                  label="Current property value"
+                  value={inputs.currentPropertyValue}
+                  onChange={(value) => setInputs({ ...inputs, currentPropertyValue: value })}
+                  suffix="USD"
+                  required
+                  invalid={showErrors && !requiredMap[0].currentValue}
+                />
+                <Field
+                  label="Adjusted cost base (ACB)"
+                  value={inputs.currentPropertyAcb}
+                  onChange={(value) => setInputs({ ...inputs, currentPropertyAcb: value })}
+                  suffix="USD"
+                  required
+                  invalid={showErrors && !requiredMap[0].currentAcb}
+                />
+                <Field
+                  label="Current mortgage balance"
+                  value={inputs.currentMortgageBalance}
+                  onChange={(value) => setInputs({ ...inputs, currentMortgageBalance: value })}
+                  suffix="USD"
+                />
+                <Field
+                  label="Current cap rate"
+                  value={inputs.currentCapRate}
+                  onChange={(value) => setInputs({ ...inputs, currentCapRate: value })}
+                  suffix="%"
+                  step={0.1}
+                />
+                <Field
+                  label="Current growth rate"
+                  value={inputs.currentGrowthRate}
+                  onChange={(value) => setInputs({ ...inputs, currentGrowthRate: value })}
+                  suffix="%"
+                  step={0.1}
+                  required
+                  invalid={showErrors && !requiredMap[1].growthRate}
+                />
+                <Field
+                  label="Client age"
+                  value={inputs.clientAge}
+                  onChange={(value) => setInputs({ ...inputs, clientAge: value })}
+                  suffix="years"
+                  step={1}
+                  required
+                  invalid={showErrors && !requiredMap[0].clientAge}
+                />
+              </Section>
+            </div>
+          )}
 
         {step === 1 && (
           <div className="flex flex-col gap-6">
-            <Section title="Current Financing">
+            <Section title="Market & Tax Assumptions">
               <Field
-                label="Remaining loan balance"
-                value={current.loanBalance}
-                onChange={(value) => setCurrent({ ...current, loanBalance: value })}
-                suffix="USD"
+                label="Marginal tax rate"
+                value={inputs.marginalTaxRate}
+                onChange={(value) => setInputs({ ...inputs, marginalTaxRate: value })}
+                suffix="%"
+                step={0.1}
+                required
+                invalid={showErrors && !requiredMap[1].taxRate}
               />
               <Field
-                label="Interest rate"
-                value={current.interestRate}
-                onChange={(value) => setCurrent({ ...current, interestRate: value })}
+                label="Capital gains inclusion rate"
+                value={inputs.capitalGainsInclusionRate}
+                onChange={(value) =>
+                  setInputs({ ...inputs, capitalGainsInclusionRate: value })
+                }
+                suffix="%"
+                step={0.1}
+              />
+              <Field
+                label="Realtor fees"
+                value={inputs.realtorFeesPercent}
+                onChange={(value) => setInputs({ ...inputs, realtorFeesPercent: value })}
+                suffix="%"
+                step={0.1}
+              />
+              <Field
+                label="Property transfer tax"
+                value={inputs.propertyTransferTaxPercent}
+                onChange={(value) =>
+                  setInputs({ ...inputs, propertyTransferTaxPercent: value })
+                }
+                suffix="%"
+                step={0.1}
+              />
+              <Field
+                label="Investment account ROI"
+                value={inputs.investmentAccountRoi}
+                onChange={(value) => setInputs({ ...inputs, investmentAccountRoi: value })}
+                suffix="%"
+                step={0.1}
+              />
+              <Field
+                label="Loan rate"
+                value={inputs.loanRate}
+                onChange={(value) => setInputs({ ...inputs, loanRate: value })}
                 suffix="%"
                 step={0.01}
               />
               <Field
-                label="Monthly payment"
-                value={current.monthlyPayment}
-                onChange={(value) => setCurrent({ ...current, monthlyPayment: value })}
-                suffix="USD"
-              />
-            </Section>
-            <Section title="Sale Assumptions">
-              <Field
-                label="Expected sale price"
-                value={current.salePrice}
-                onChange={(value) => setCurrent({ ...current, salePrice: value })}
-                suffix="USD"
-                required
-                invalid={showErrors && !requiredMap[1].salePrice}
+                label="Loan amortization"
+                value={inputs.loanAmortizationYears}
+                onChange={(value) => setInputs({ ...inputs, loanAmortizationYears: value })}
+                suffix="years"
+                step={1}
               />
               <Field
-                label="Selling costs"
-                value={current.sellingCostPercent}
-                onChange={(value) => setCurrent({ ...current, sellingCostPercent: value })}
+                label="Planning age"
+                value={inputs.planningAge}
+                onChange={(value) => setInputs({ ...inputs, planningAge: value })}
+                suffix="years"
+                step={1}
+              />
+              <Field
+                label="Decision margin"
+                value={inputs.decisionMarginPercent}
+                onChange={(value) => setInputs({ ...inputs, decisionMarginPercent: value })}
                 suffix="%"
                 step={0.1}
+                hint="Default 2%"
               />
             </Section>
           </div>
@@ -393,160 +393,27 @@ export default function Wizard() {
 
         {step === 2 && (
           <div className="flex flex-col gap-6">
-            <Section title="New Property Purchase">
+            <Section title="New Property Strategy">
               <Field
-                label="Purchase price"
-                value={next.purchasePrice}
-                onChange={(value) => setNext({ ...next, purchasePrice: value })}
-                suffix="USD"
-                required
-                invalid={showErrors && !requiredMap[2].purchasePrice}
-              />
-              <Field
-                label="Down payment"
-                value={next.downPaymentPercent}
-                onChange={(value) => setNext({ ...next, downPaymentPercent: value })}
-                suffix="%"
-                step={0.1}
-                required
-                invalid={showErrors && !requiredMap[2].downPayment}
-              />
-              <Field
-                label="Closing costs"
-                value={next.closingCosts}
-                onChange={(value) => setNext({ ...next, closingCosts: value })}
-                suffix="USD"
-                hint="or % below"
-              />
-              <Field
-                label="Closing costs %"
-                value={next.closingCostsPercent}
-                onChange={(value) => setNext({ ...next, closingCostsPercent: value })}
+                label="Target cap rate"
+                value={inputs.newCapRate}
+                onChange={(value) => setInputs({ ...inputs, newCapRate: value })}
                 suffix="%"
                 step={0.1}
               />
               <Field
-                label="Rehab / make-ready"
-                value={next.rehab}
-                onChange={(value) => setNext({ ...next, rehab: value })}
-                suffix="USD"
-                hint="optional"
-              />
-            </Section>
-
-            <Section title="Financing">
-              <Field
-                label="Interest rate"
-                value={next.interestRate}
-                onChange={(value) => setNext({ ...next, interestRate: value })}
-                suffix="%"
-                step={0.01}
-              />
-              <Field
-                label="Loan term"
-                value={next.loanTermYears}
-                onChange={(value) => setNext({ ...next, loanTermYears: value })}
-                suffix="years"
-                step={1}
-              />
-            </Section>
-
-            <Section title="Projected Income">
-              <Field
-                label="Monthly rent"
-                value={next.rent}
-                onChange={(value) => setNext({ ...next, rent: value })}
-                suffix="USD"
-                required
-                invalid={showErrors && !requiredMap[2].newRent}
-              />
-              <Field
-                label="Other income"
-                value={next.otherIncome}
-                onChange={(value) => setNext({ ...next, otherIncome: value })}
-                suffix="USD"
-              />
-              <Field
-                label="Vacancy/credit loss"
-                value={next.vacancyPercent}
-                onChange={(value) => setNext({ ...next, vacancyPercent: value })}
-                suffix="%"
-                step={0.1}
-              />
-            </Section>
-
-            <Section title="Operating Expenses (Monthly)">
-              <Field
-                label="Property taxes"
-                value={next.expenses.taxes}
-                onChange={(value) => setNext({ ...next, expenses: { ...next.expenses, taxes: value } })}
-                suffix="USD"
-              />
-              <Field
-                label="Insurance"
-                value={next.expenses.insurance}
-                onChange={(value) =>
-                  setNext({ ...next, expenses: { ...next.expenses, insurance: value } })
-                }
-                suffix="USD"
-              />
-              <Field
-                label="Maintenance/repairs"
-                value={next.expenses.maintenanceMonthly}
-                onChange={(value) =>
-                  setNext({
-                    ...next,
-                    expenses: { ...next.expenses, maintenanceMonthly: value },
-                  })
-                }
-                suffix="USD"
-                hint="+ % below"
-              />
-              <Field
-                label="Maintenance % of rent"
-                value={next.expenses.maintenancePercent}
-                onChange={(value) =>
-                  setNext({
-                    ...next,
-                    expenses: { ...next.expenses, maintenancePercent: value },
-                  })
-                }
+                label="Target growth rate"
+                value={inputs.newGrowthRate}
+                onChange={(value) => setInputs({ ...inputs, newGrowthRate: value })}
                 suffix="%"
                 step={0.1}
               />
               <Field
-                label="Management fee"
-                value={next.expenses.managementPercent}
-                onChange={(value) =>
-                  setNext({
-                    ...next,
-                    expenses: { ...next.expenses, managementPercent: value },
-                  })
-                }
+                label="Loan-to-value (LTV)"
+                value={inputs.newLoanToValue}
+                onChange={(value) => setInputs({ ...inputs, newLoanToValue: value })}
                 suffix="%"
                 step={0.1}
-              />
-              <Field
-                label="Owner-paid utilities"
-                value={next.expenses.utilities}
-                onChange={(value) =>
-                  setNext({ ...next, expenses: { ...next.expenses, utilities: value } })
-                }
-                suffix="USD"
-              />
-              <Field
-                label="HOA / misc"
-                value={next.expenses.hoa}
-                onChange={(value) => setNext({ ...next, expenses: { ...next.expenses, hoa: value } })}
-                suffix="USD"
-              />
-              <Field
-                label="Reserves / capex"
-                value={next.expenses.reserves}
-                onChange={(value) =>
-                  setNext({ ...next, expenses: { ...next.expenses, reserves: value } })
-                }
-                suffix="USD"
               />
             </Section>
           </div>
@@ -554,112 +421,205 @@ export default function Wizard() {
 
         {step === 3 && (
           <div className="flex flex-col gap-6">
-            <Section title="Comparison Summary">
-              <div className="col-span-full grid gap-4 md:grid-cols-2">
-                <div className="rounded-3xl border border-white/15 bg-black/30 p-5">
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/40">Current Rental</p>
-                  <h4 className="mt-3 text-xl font-semibold text-white">Cash Flow & Returns</h4>
-                  <div className="mt-4 space-y-2 text-sm text-white/70">
-                    <p>Monthly cash flow: <span className="text-white">{currency.format(comparison.current.cashFlowMonthly)}</span></p>
-                    <p>Annual cash flow: <span className="text-white">{currency.format(comparison.current.cashFlowAnnual)}</span></p>
-                    <p>Cap rate: <span className="text-white">{percent.format(comparison.current.capRate)}</span></p>
-                    <p>Cash-on-cash: <span className="text-white">{percent.format(comparison.current.cashOnCash)}</span></p>
-                  </div>
-                </div>
-                <div className="rounded-3xl border border-white/15 bg-black/30 p-5">
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/40">New Property</p>
-                  <h4 className="mt-3 text-xl font-semibold text-white">Cash Flow & Returns</h4>
-                  <div className="mt-4 space-y-2 text-sm text-white/70">
-                    <p>Monthly cash flow: <span className="text-white">{currency.format(comparison.next.cashFlowMonthly)}</span></p>
-                    <p>Annual cash flow: <span className="text-white">{currency.format(comparison.next.cashFlowAnnual)}</span></p>
-                    <p>Cap rate: <span className="text-white">{percent.format(comparison.next.capRate)}</span></p>
-                    <p>Cash-on-cash: <span className="text-white">{percent.format(comparison.next.cashOnCash)}</span></p>
-                  </div>
-                </div>
+            <div
+              className={`rounded-3xl border p-6 shadow-[0_20px_60px_-45px_rgba(15,23,42,0.8)] ${
+                decision.decision === "YES"
+                  ? "border-emerald-400/30 bg-emerald-500/10"
+                  : "border-rose-400/30 bg-rose-500/10"
+              }`}
+            >
+              <p className="text-xs uppercase tracking-[0.3em] text-white/60">Decision</p>
+              <h2 className="mt-2 text-3xl font-semibold text-white">
+                {decision.decision === "YES" ? "YES — Sell" : "NO — Keep"}
+              </h2>
+              <p className="mt-2 text-sm text-white/70">{decision.decisionReason}</p>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/60">
+                <span>Planning age: {decision.planningAge}</span>
+                <span>Margin: {percent.format(decision.marginPercent / 100)}</span>
+                {decision.breakEvenAge ? <span>Break-even: age {decision.breakEvenAge}</span> : null}
               </div>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button
+                  className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black transition hover:scale-[1.02]"
+                  onClick={() => window.print()}
+                >
+                  Download report (PDF)
+                </button>
+              </div>
+            </div>
+
+            <Section title="Planning Age Snapshot">
+              <SummaryStat
+                label="Current strategy value"
+                value={currency.format(decision.currentAtPlanning.strategyValue)}
+              />
+              <SummaryStat
+                label="New strategy value"
+                value={currency.format(decision.newAtPlanning.strategyValue)}
+              />
+              <SummaryStat label="Delta" value={currency.format(planningDelta)} />
+              <SummaryStat
+                label="After-tax cash flow"
+                value={currency.format(decision.newAtPlanning.cashFlow)}
+              />
             </Section>
 
-            <Section title="Capital & Financing Snapshot">
-              <SummaryStat
-                label="Net sale proceeds"
-                value={currency.format(comparison.saleNetProceeds)}
-              />
-              <SummaryStat
-                label="Estimated new loan amount"
-                value={currency.format(comparison.newLoanAmount)}
-              />
-              <SummaryStat
-                label="Estimated monthly payment"
-                value={currencyFine.format(comparison.newMonthlyPayment)}
-              />
-              <SummaryStat
-                label="Cash invested (new)"
-                value={currency.format(comparison.next.cashInvested)}
-              />
-            </Section>
+            <ComparisonChart data={decision.series} />
+
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">After-tax cash flow check-in</h3>
+                  <p className="mt-1 text-xs text-white/50">
+                    Yearly cash flow snapshots at ages {year1.age}, {year10.age}, {year20.age}.
+                  </p>
+                </div>
+                <button
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    showAdvanced
+                      ? "border-white/60 text-white"
+                      : "border-white/20 text-white/70"
+                  }`}
+                  onClick={() => setShowAdvanced((value) => !value)}
+                >
+                  Advanced
+                </button>
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                {[year1, year10, year20].map((snapshot) => (
+                  <div key={snapshot.age} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/40">Age {snapshot.age}</p>
+                    <p className="mt-3 text-sm text-white/70">
+                      Current: {snapshot.current ? currency.format(snapshot.current.cashFlow) : "—"}
+                    </p>
+                    <p className="text-sm text-white/70">
+                      New: {snapshot.next ? currency.format(snapshot.next.cashFlow) : "—"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {showAdvanced ? (
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <SummaryStat
+                    label="Peak delta"
+                    value={currency.format(decision.peakDeltaValue)}
+                  />
+                  <SummaryStat
+                    label="Peak delta age"
+                    value={decision.peakDeltaAge ? String(decision.peakDeltaAge) : "—"}
+                  />
+                </div>
+              ) : null}
+            </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-white/70">
-              <p className="text-white font-semibold">Decision signal</p>
+              <p className="text-white font-semibold">Decision logic</p>
               <p className="mt-2">
-                Focus on higher annual cash flow and stronger cash-on-cash return. If the new
-                property also improves cap rate while staying within your available equity, it is
-                likely a better cash-flow swap.
+                The recommendation compares net strategy values at the planning age. If the new
+                strategy is at least {inputs.decisionMarginPercent}% higher, the decision turns to
+                sell. Toggle Advanced to see the peak delta within the timeline.
               </p>
               <p className="mt-3 text-xs text-white/50">
-                These estimates are simplified for v1. Taxes, financing fees, and depreciation are
-                not included.
+                These estimates are for illustration only and ignore depreciation, tax law
+                exceptions, or property-specific costs.
               </p>
             </div>
           </div>
         )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="text-sm text-white/60">
-          Step {step + 1} of {steps.length}
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {showErrors && !isStepValid ? (
-            <span className="text-xs text-lupin-accent">Complete the required fields to continue.</span>
-          ) : null}
-          <div className="flex gap-3">
-          <button
-            className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/50 hover:text-white disabled:opacity-40"
-            onClick={() => {
-              setShowErrors(false);
-              setStep((value) => Math.max(0, value - 1));
-            }}
-            disabled={step === 0}
-          >
-            Back
-          </button>
-          <button
-            className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02]"
-            onClick={handleNext}
-            disabled={step === steps.length - 1}
-          >
-            {step === steps.length - 1 ? "Done" : "Continue"}
-          </button>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="text-sm text-white/60">
+            Step {step + 1} of {steps.length}
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            {showErrors && !isStepValid ? (
+              <span className="text-xs text-lupin-accent">Complete the required fields to continue.</span>
+            ) : null}
+            <div className="flex gap-3">
+              <button
+                className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/50 hover:text-white disabled:opacity-40"
+                onClick={() => {
+                  setShowErrors(false);
+                  setStep((value) => Math.max(0, value - 1));
+                }}
+                disabled={step === 0}
+              >
+                Back
+              </button>
+              <button
+                className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02]"
+                onClick={handleNext}
+                disabled={step === steps.length - 1}
+              >
+                {step === steps.length - 1 ? "Done" : "Continue"}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="rounded-[28px] border border-white/10 bg-black/50 p-6 text-xs text-white/50">
-        <p>
-          Note: Cash-on-cash uses equity from the current sale as invested capital for comparison.
-          Closing costs default to the percent value if a dollar amount is not provided.
-        </p>
-        <p className="mt-2">
-          Preview values: New loan payment is estimated using the loan term and rate inputs.
-        </p>
-      </div>
-
-      <div className="flex items-center justify-between text-xs text-white/50">
-        <div className="flex items-center gap-2">
-          <Image src="/assets/lupin-logo.png" alt="Lupin logo" width={28} height={28} />
-          <span>Rental Sale Calculator</span>
+        <div className="rounded-[28px] border border-white/10 bg-black/50 p-6 text-xs text-white/50">
+          <p>
+            Note: Capital gains taxes are modeled on the current property only, and sale proceeds are
+            reduced by realtor fees and transfer tax before purchasing the new property.
+          </p>
+          <p className="mt-2">
+            Investment account growth assumes after-tax ROI on the prior balance plus current year
+            cash flow.
+          </p>
         </div>
-        <span>© Lupin</span>
+
+        <div className="flex items-center justify-between text-xs text-white/50">
+          <div className="flex items-center gap-2">
+            <Image src="/assets/lupin-logo.png" alt="Lupin logo" width={28} height={28} />
+            <span>Rental Sale Calculator</span>
+          </div>
+          <span>© Lupin</span>
+        </div>
+      </div>
+
+      <div className="print-only">
+        <div className="mx-auto max-w-4xl p-8">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Report</p>
+              <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+                Sell vs Keep Recommendation
+              </h1>
+            </div>
+            <div className="text-right text-xs text-slate-500">
+              <p>Planning age: {decision.planningAge}</p>
+              <p>Margin: {percent.format(decision.marginPercent / 100)}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Decision</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+              {decision.decision === "YES" ? "YES — Sell" : "NO — Keep"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">{decision.decisionReason}</p>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <SummaryStat
+              label="Current strategy value"
+              value={currency.format(decision.currentAtPlanning.strategyValue)}
+              tone="light"
+            />
+            <SummaryStat
+              label="New strategy value"
+              value={currency.format(decision.newAtPlanning.strategyValue)}
+              tone="light"
+            />
+            <SummaryStat label="Delta" value={currency.format(planningDelta)} tone="light" />
+          </div>
+
+          <div className="mt-6">
+            <ComparisonChart data={decision.series} tone="light" />
+          </div>
+        </div>
       </div>
     </div>
   );

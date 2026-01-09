@@ -1,8 +1,7 @@
-import type { CurrentPropertyInputs, NewPropertyInputs } from "./calculations";
+import type { DecisionInputs } from "./sellDecision";
 
 export type AppState = {
-  current: CurrentPropertyInputs;
-  next: NewPropertyInputs;
+  inputs: DecisionInputs;
 };
 
 export interface AppStorage {
