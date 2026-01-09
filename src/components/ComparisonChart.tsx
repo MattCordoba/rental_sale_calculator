@@ -7,12 +7,18 @@ type ChartPoint = {
   newValue: number;
 };
 
-const currencyCompact = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
+const formatCompactUSD = (value: number) => {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  const format = (num: number, suffix: string) => {
+    const rounded = Math.round(num * 100) / 100;
+    return `${sign}$${rounded.toFixed(2)}${suffix}`;
+  };
+  if (abs >= 1_000_000_000) return format(abs / 1_000_000_000, "B");
+  if (abs >= 1_000_000) return format(abs / 1_000_000, "M");
+  if (abs >= 1_000) return format(abs / 1_000, "K");
+  return `${sign}$${Math.round(abs)}`;
+};
 
 const buildTicks = (min: number, max: number, count: number) => {
   if (count <= 1) return [min, max];
@@ -109,7 +115,7 @@ export default function ComparisonChart({
         formatter: (params: { axisValue: number; value: number; seriesName: string }[]) => {
           const lines = params.map(
             (item) =>
-              `${item.seriesName}: ${currencyCompact.format(item.value)}`
+              `${item.seriesName}: ${formatCompactUSD(item.value)}`
           );
           return `Age ${params[0]?.axisValue}<br/>${lines.join("<br/>")}`;
         },
@@ -125,7 +131,7 @@ export default function ComparisonChart({
         type: "value",
         axisLabel: {
           color: "rgba(255,255,255,0.6)",
-          formatter: (value: number) => currencyCompact.format(value),
+          formatter: (value: number) => formatCompactUSD(value),
         },
         splitLine: { lineStyle: { color: "rgba(255,255,255,0.08)" } },
       },
@@ -237,7 +243,7 @@ export default function ComparisonChart({
               fill={axisText}
               fontSize="11"
             >
-              {currencyCompact.format(tick)}
+              {formatCompactUSD(tick)}
             </text>
           </g>
         ))}
