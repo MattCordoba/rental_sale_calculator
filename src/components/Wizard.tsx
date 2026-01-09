@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   type CurrentPropertyInputs,
@@ -627,7 +628,7 @@ export default function Wizard() {
 
       <div className="flex items-center justify-between text-xs text-white/50">
         <div className="flex items-center gap-2">
-          <img src="/assets/lupin-logo.png" alt="Lupin logo" className="h-7 w-7" />
+          <Image src="/assets/lupin-logo.png" alt="Lupin logo" width={28} height={28} />
           <span>Rental Sale Calculator</span>
         </div>
         <span>© Lupin</span>

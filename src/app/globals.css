@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "@fontsource/manrope/index.css";
+@import "@fontsource/space-grotesk/index.css";
 
 :root {
   --lupin-ink: #0b0f1a;
@@ -7,6 +9,8 @@
   --lupin-accent: #6af7d2;
   --lupin-steel: #6b7280;
   --lupin-card: rgba(255, 255, 255, 0.08);
+  --font-body: "Manrope", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
 }
 
 @theme inline {

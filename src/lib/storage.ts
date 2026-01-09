@@ -15,8 +15,8 @@ export class NoopStorage implements AppStorage {
     return null;
   }
 
-  async save(): Promise<void> {
-    return;
+  async save(state: AppState): Promise<void> {
+    void state;
   }
 }
 
