@@ -93,34 +93,62 @@ const Field = ({
   required?: boolean;
   invalid?: boolean;
   onChange: (value: number) => void;
-}) => (
-  <label className="flex flex-col gap-2 text-sm text-white/80">
-    <span className="flex items-center justify-between">
-      <span className="font-medium text-white">
-        {label}
-        {required ? <span className="ml-1 text-lupin-accent">*</span> : null}
+}) => {
+  const [inputValue, setInputValue] = useState(
+    Number.isFinite(value) && value !== 0 ? String(value) : ""
+  );
+
+  useEffect(() => {
+    const nextValue = Number.isFinite(value) && value !== 0 ? String(value) : "";
+    if (nextValue !== inputValue) {
+      setInputValue(nextValue);
+    }
+  }, [inputValue, value]);
+
+  return (
+    <label className="flex flex-col gap-2 text-sm text-white/80">
+      <span className="flex items-center justify-between">
+        <span className="font-medium text-white">
+          {label}
+          {required ? <span className="ml-1 text-lupin-accent">*</span> : null}
+        </span>
+        {hint ? <span className="text-xs text-white/50">{hint}</span> : null}
       </span>
-      {hint ? <span className="text-xs text-white/50">{hint}</span> : null}
-    </span>
-    <div
-      className={`flex items-center gap-2 rounded-2xl border px-4 py-3 shadow-inner transition ${
-        invalid ? "border-lupin-accent bg-white/10" : "border-white/15 bg-white/5"
-      }`}
-    >
-      <input
-        className="w-full bg-transparent text-lg text-white placeholder-white/40 outline-none"
-        type="number"
-        step={step}
-        value={Number.isFinite(value) ? value : 0}
-        onChange={(event) => onChange(parseFloat(event.target.value) || 0)}
-      />
-      {suffix ? <span className="text-xs text-white/50">{suffix}</span> : null}
-    </div>
-    {invalid ? (
-      <span className="text-xs text-lupin-accent/90">Required for this step.</span>
-    ) : null}
-  </label>
-);
+      <div
+        className={`flex items-center gap-2 rounded-2xl border px-4 py-3 shadow-inner transition ${
+          invalid ? "border-lupin-accent bg-white/10" : "border-white/15 bg-white/5"
+        }`}
+      >
+        <input
+          className="w-full bg-transparent text-lg text-white placeholder-white/40 outline-none"
+          type="number"
+          step={step}
+          value={inputValue}
+          onFocus={() => {
+            if (inputValue === "0") {
+              setInputValue("");
+            }
+          }}
+          onChange={(event) => {
+            const nextRaw = event.target.value;
+            setInputValue(nextRaw);
+            const parsed = parseFloat(nextRaw);
+            onChange(Number.isFinite(parsed) ? parsed : 0);
+          }}
+          onBlur={() => {
+            if (inputValue.trim() === "") {
+              onChange(0);
+            }
+          }}
+        />
+        {suffix ? <span className="text-xs text-white/50">{suffix}</span> : null}
+      </div>
+      {invalid ? (
+        <span className="text-xs text-lupin-accent/90">Required for this step.</span>
+      ) : null}
+    </label>
+  );
+};
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_-45px_rgba(15,23,42,0.8)]">
