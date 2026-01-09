@@ -81,20 +81,31 @@ const Field = ({
   onChange,
   step = 1,
   hint,
+  required,
+  invalid,
 }: {
   label: string;
   value: number;
   suffix?: string;
   step?: number;
   hint?: string;
+  required?: boolean;
+  invalid?: boolean;
   onChange: (value: number) => void;
 }) => (
   <label className="flex flex-col gap-2 text-sm text-white/80">
     <span className="flex items-center justify-between">
-      <span className="font-medium text-white">{label}</span>
+      <span className="font-medium text-white">
+        {label}
+        {required ? <span className="ml-1 text-lupin-accent">*</span> : null}
+      </span>
       {hint ? <span className="text-xs text-white/50">{hint}</span> : null}
     </span>
-    <div className="flex items-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 shadow-inner">
+    <div
+      className={`flex items-center gap-2 rounded-2xl border px-4 py-3 shadow-inner transition ${
+        invalid ? "border-lupin-accent bg-white/10" : "border-white/15 bg-white/5"
+      }`}
+    >
       <input
         className="w-full bg-transparent text-lg text-white placeholder-white/40 outline-none"
         type="number"
@@ -104,6 +115,9 @@ const Field = ({
       />
       {suffix ? <span className="text-xs text-white/50">{suffix}</span> : null}
     </div>
+    {invalid ? (
+      <span className="text-xs text-lupin-accent/90">Required for this step.</span>
+    ) : null}
   </label>
 );
 
@@ -144,6 +158,39 @@ export default function Wizard() {
   const comparison = useMemo(() => calculateComparison(current, next), [current, next]);
 
   const steps = ["Current", "Sale", "New", "Results"];
+  const [showErrors, setShowErrors] = useState(false);
+
+  const requiredMap = useMemo(() => {
+    return [
+      {
+        currentRent: current.rent > 0,
+      },
+      {
+        salePrice: current.salePrice > 0,
+      },
+      {
+        purchasePrice: next.purchasePrice > 0,
+        downPayment: next.downPaymentPercent > 0,
+        newRent: next.rent > 0,
+      },
+      {},
+    ];
+  }, [current.rent, current.salePrice, next.downPaymentPercent, next.purchasePrice, next.rent]);
+
+  const isStepValid = useMemo(() => {
+    const map = requiredMap[step] ?? {};
+    return Object.values(map).every(Boolean);
+  }, [requiredMap, step]);
+
+  const handleNext = () => {
+    if (step >= steps.length - 1) return;
+    if (!isStepValid) {
+      setShowErrors(true);
+      return;
+    }
+    setShowErrors(false);
+    setStep((value) => Math.min(steps.length - 1, value + 1));
+  };
 
   return (
     <div className="flex flex-col gap-10">
@@ -174,6 +221,8 @@ export default function Wizard() {
                 value={current.rent}
                 onChange={(value) => setCurrent({ ...current, rent: value })}
                 suffix="USD"
+                required
+                invalid={showErrors && !requiredMap[0].currentRent}
               />
               <Field
                 label="Other income"
@@ -299,6 +348,8 @@ export default function Wizard() {
                 value={current.salePrice}
                 onChange={(value) => setCurrent({ ...current, salePrice: value })}
                 suffix="USD"
+                required
+                invalid={showErrors && !requiredMap[1].salePrice}
               />
               <Field
                 label="Selling costs"
@@ -319,6 +370,8 @@ export default function Wizard() {
                 value={next.purchasePrice}
                 onChange={(value) => setNext({ ...next, purchasePrice: value })}
                 suffix="USD"
+                required
+                invalid={showErrors && !requiredMap[2].purchasePrice}
               />
               <Field
                 label="Down payment"
@@ -326,6 +379,8 @@ export default function Wizard() {
                 onChange={(value) => setNext({ ...next, downPaymentPercent: value })}
                 suffix="%"
                 step={0.1}
+                required
+                invalid={showErrors && !requiredMap[2].downPayment}
               />
               <Field
                 label="Closing costs"
@@ -373,6 +428,8 @@ export default function Wizard() {
                 value={next.rent}
                 onChange={(value) => setNext({ ...next, rent: value })}
                 suffix="USD"
+                required
+                invalid={showErrors && !requiredMap[2].newRent}
               />
               <Field
                 label="Other income"
@@ -532,21 +589,29 @@ export default function Wizard() {
         <div className="text-sm text-white/60">
           Step {step + 1} of {steps.length}
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col items-end gap-2">
+          {showErrors && !isStepValid ? (
+            <span className="text-xs text-lupin-accent">Complete the required fields to continue.</span>
+          ) : null}
+          <div className="flex gap-3">
           <button
             className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/50 hover:text-white disabled:opacity-40"
-            onClick={() => setStep((value) => Math.max(0, value - 1))}
+            onClick={() => {
+              setShowErrors(false);
+              setStep((value) => Math.max(0, value - 1));
+            }}
             disabled={step === 0}
           >
             Back
           </button>
           <button
             className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:scale-[1.02]"
-            onClick={() => setStep((value) => Math.min(steps.length - 1, value + 1))}
+            onClick={handleNext}
             disabled={step === steps.length - 1}
           >
             {step === steps.length - 1 ? "Done" : "Continue"}
           </button>
+          </div>
         </div>
       </div>
 
