@@ -7,23 +7,83 @@ const parseNumber = (value: string | null) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const extractJsonScript = (html: string, id: string) => {
+  const match = html.match(new RegExp(`<script[^>]*id=[\"']${id}[\"'][^>]*>([\\s\\S]*?)<\\/script>`, "i"));
+  return match ? match[1] : null;
+};
+
+const extractLdJson = (html: string) => {
+  const match = html.match(
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i
+  );
+  return match ? match[1] : null;
+};
+
 const parseRemaxHtml = (html: string) => {
-  const priceMatch = html.match(/\\$\\s*([0-9,]+)\\s*\\n?/i);
-  const bedBathMatch = html.match(/(\\d+)\\s*bed\\s*(\\d+)\\s*bath/i);
-  const sqftMatch = html.match(/([0-9,]+)\\s*sqft/i);
-  const addressMatch = html.match(/([0-9]+\\s+[A-Z0-9\\s]+,\\s*[A-Z\\s]+,\\s*BC\\s*[A-Z0-9\\s]+)/i);
-  const taxMatch = html.match(/Property Tax\\s*:?\\s*\\$\\s*([0-9,]+)/i);
+  const nextDataRaw = extractJsonScript(html, "__NEXT_DATA__");
+  if (nextDataRaw) {
+    try {
+      const parsed = JSON.parse(nextDataRaw);
+      const listing =
+        parsed?.props?.pageProps?.dehydratedState?.queries?.[0]?.state?.data ?? null;
+      if (listing) {
+        return {
+          address: listing.address || listing.mlsAddress || "",
+          city: listing.city || listing.mlsCity || "",
+          bedrooms: parseNumber(listing.beds),
+          bathrooms: parseNumber(listing.baths),
+          sqft: parseNumber(listing.sqFtRaw ?? listing.sqFtSearch),
+          price: parseNumber(String(listing.listPrice ?? listing.marketPrice ?? "")),
+          hoa: 0,
+          propertyTaxAnnual: parseNumber(String(listing.taxAmount ?? "")),
+        };
+      }
+    } catch {
+      // fall through to other parsing strategies
+    }
+  }
+
+  const ldRaw = extractLdJson(html);
+  if (ldRaw) {
+    try {
+      const parsed = JSON.parse(ldRaw);
+      const graph = Array.isArray(parsed?.["@graph"]) ? parsed["@graph"] : [parsed];
+      const product = graph.find((node: { ["@type"]?: string }) => node?.["@type"] === "Product");
+      const residence = graph.find((node: { ["@type"]?: string }) =>
+        ["House", "SingleFamilyResidence"].includes(node?.["@type"] ?? "")
+      );
+      const offer = product?.offers;
+      return {
+        address: residence?.address?.streetAddress || product?.name || "",
+        city: residence?.address?.addressLocality || "",
+        bedrooms: parseNumber(residence?.numberOfBedrooms),
+        bathrooms: parseNumber(residence?.numberOfBathroomsTotal),
+        sqft: parseNumber(residence?.floorSize?.value),
+        price: parseNumber(String(offer?.price ?? "")),
+        hoa: 0,
+        propertyTaxAnnual: 0,
+      };
+    } catch {
+      // ignore and fall through
+    }
+  }
+
+  const priceMatch = html.match(/data-cy=["']property-price["'][^>]*>\s*\$?([0-9,]+)/i);
+  const bedMatch = html.match(/data-cy=["']property-beds["'][^>]*>\s*<span[^>]*>([0-9,]+)/i);
+  const bathMatch = html.match(/data-cy=["']property-baths["'][^>]*>\s*<span[^>]*>([0-9,]+)/i);
+  const sqftMatch = html.match(/data-cy=["']property-sqft["'][^>]*>\s*<span[^>]*>([0-9,]+)/i);
+  const addressMatch = html.match(/data-cy=["']property-address["'][^>]*>\s*<span[^>]*>([^<]+)/i);
+  const taxMatch = html.match(/Property Tax<\/h4><span>:\s*<\/span><span>\$([0-9,]+)/i);
 
   const address = addressMatch ? addressMatch[1].trim() : "";
-  const cityMatch = address.match(/,\\s*([A-Z\\s]+),\\s*BC/i);
-  const city = cityMatch ? cityMatch[1].trim().toLowerCase() : "";
-  const cityTitle = city ? city.charAt(0).toUpperCase() + city.slice(1) : "";
+  const cityMatch = address.match(/,\s*([^,]+),\s*BC/i);
+  const city = cityMatch ? cityMatch[1].trim() : "";
 
   return {
     address,
-    city: cityTitle,
-    bedrooms: bedBathMatch ? Number.parseInt(bedBathMatch[1], 10) : 0,
-    bathrooms: bedBathMatch ? Number.parseInt(bedBathMatch[2], 10) : 0,
+    city,
+    bedrooms: parseNumber(bedMatch ? bedMatch[1] : null),
+    bathrooms: parseNumber(bathMatch ? bathMatch[1] : null),
     sqft: parseNumber(sqftMatch ? sqftMatch[1] : null),
     price: parseNumber(priceMatch ? priceMatch[1] : null),
     hoa: 0,
