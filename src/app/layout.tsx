@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "Rental Sale Calculator",
+  title: "Lupin Real Estate Tools",
   description:
-    "Compare your current rental to a new property and decide if a sale improves cash flow.",
-  applicationName: "Rental Sale Calculator",
+    "Decision-ready calculators for real estate planning, starting with the rental sale model.",
+  applicationName: "Lupin Real Estate Tools",
   manifest: "/manifest.json",
   icons: {
     icon: [{ url: "/icons/icon-192.png" }, { url: "/icons/icon-512.png" }],
@@ -27,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
