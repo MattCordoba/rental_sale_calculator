@@ -12,6 +12,11 @@ const navItems = [
     status: "Live",
   },
   {
+    label: "Rental Purchase Verdict",
+    href: "/rental-purchase-verdict",
+    status: "Live",
+  },
+  {
     label: "Portfolio Optimizer",
     href: "/coming-soon",
     status: "Coming soon",
